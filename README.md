@@ -10,6 +10,12 @@
 
 ---
 
+## Pipeline — 100% ATT&CK Coverage
+
+![Pipeline](docs/screenshots/05-pipeline-100-coverage.png)
+
+---
+
 ## Overview
 
 Most detection engineering work happens in silos — someone writes a rule, deploys it, and hopes it works. This project solves that by building a **CI/CD pipeline for detections**: every rule is automatically tested against a real attack simulation and must pass before it's considered valid coverage.
@@ -73,6 +79,43 @@ This mirrors how mature security teams at enterprise organizations validate thei
 
 ---
 
+## Screenshots
+
+### Lab Environment — Wazuh Agent Active
+![Wazuh Agent](docs/screenshots/01-wazuh-agent-active.png)
+
+*Windows 11 host connected to Wazuh manager with active status — the foundation of the detection lab.*
+
+---
+
+### Attack Simulation — Sysmon Telemetry Flooding In
+![Sysmon Events](docs/screenshots/02-sysmon-events-firing.png)
+
+*223+ Sysmon events captured during ATT&CK technique simulation — discovery activity, net.exe account enumeration, and abnormal process chains all visible.*
+
+---
+
+### Attack Simulation — High Severity Detections
+![Attack Detections](docs/screenshots/03-sysmon-attack-detections.png)
+
+*Level 15 (critical) alerts firing — executable dropped in malware-common folder and Base64-like pattern detected in registry key (T1027 Defense Evasion).*
+
+---
+
+### Custom Detection Rules Firing
+![Custom Rules](docs/screenshots/04-custom-rules-firing.png)
+
+*Custom rule IDs 100004 and 100006 firing — these are not built-in Wazuh rules. These were written specifically for this project, mapped to MITRE ATT&CK T1059.001 and T1082.*
+
+---
+
+### ATT&CK Coverage Dashboard
+![Dashboard](docs/screenshots/06-html-dashboard.png)
+
+*Auto-generated HTML dashboard showing 100% coverage ring, 5/5 techniques passed, with full ATT&CK technique breakdown.*
+
+---
+
 ## Stack
 
 | Component | Technology |
@@ -100,8 +143,9 @@ detection-engineering-cicd/
 ├── detection-rules/
 │   └── local_rules.xml          # Custom Wazuh detection rules
 ├── reports/                     # Generated coverage reports (JSON/HTML/MD)
-├── attack-simulations/          # ATT&CK technique documentation
-└── docs/                        # Architecture and setup documentation
+├── docs/
+│   └── screenshots/             # Project screenshots
+└── attack-simulations/          # ATT&CK technique documentation
 ```
 
 ---
@@ -126,8 +170,10 @@ python3 pipeline/generate_report.py       # Generate AI incident report
 ```
 ============================================================
   Detection Engineering CI/CD Pipeline
-  Run time: 2026-06-04 18:39:01
+  Full Run - Thu Jun  4 06:58:08 PM CDT 2026
 ============================================================
+
+[1/3] Running detection validation...
 [+] Wazuh API authenticated successfully
 
 [*] Testing T1059.001 - PowerShell Execution
@@ -149,13 +195,23 @@ python3 pipeline/generate_report.py       # Generate AI incident report
   DETECTION COVERAGE REPORT
   Total: 5 | Passed: 5 | Failed: 0 | Coverage: 100.0%
 ============================================================
+
+[2/3] Generating coverage dashboard...
+[+] Dashboard saved to reports/dashboard_20260604_185819.html
+
+[3/3] Generating AI incident report...
+[+] AI incident report saved to reports/incident_report_20260604_185831.md
+============================================================
+  Pipeline complete!
+  Check reports/ folder for all outputs
+============================================================
 ```
 
 ---
 
 ## Challenges & Problem Solving
 
-This section documents the real technical obstacles encountered and how they were resolved — because detection engineering is mostly debugging.
+This section documents the real technical obstacles encountered during this build and how they were resolved. Detection engineering is mostly debugging — this is what that actually looks like.
 
 ---
 
@@ -167,9 +223,9 @@ ERROR: Couldn't find type of system
 ```
 Arch Linux is not in Wazuh's supported distro list and the script has no fallback.
 
-**Solution:** Deployed Wazuh entirely via Docker using the official `wazuh-docker` single-node compose stack. This actually produced a more portable and reproducible environment than a native install would have — a better outcome than the original plan.
+**Solution:** Deployed Wazuh entirely via Docker using the official `wazuh-docker` single-node compose stack. This actually produced a more portable and reproducible environment than a native install would have.
 
-**Lesson:** When a tool doesn't support your OS, containerization is often a cleaner solution than fighting the installer.
+**Lesson:** When a tool doesn't support your OS, containerization is often a cleaner solution than fighting the installer. The Docker deployment is also more realistic — most enterprise Wazuh deployments run containerized.
 
 ---
 
@@ -178,81 +234,98 @@ Arch Linux is not in Wazuh's supported distro list and the script has no fallbac
 **Problem:** During PowerShell installation, the root partition hit 100% capacity:
 ```
 Your Root partition is running out of disk space; 0 MiB remaining (0%)
+df -h showed: /dev/sda2  49G  47G  0  100% /
 ```
-The VM had 49GB allocated but Docker image layers from multiple previous projects had consumed nearly all of it.
+Docker image layers from multiple previous security projects had consumed nearly all available space.
 
-**Solution:** Ran `docker system prune -a --volumes -f` which safely removed unused images and volumes from previous projects, recovering 4.7GB. Also cleared journal logs and build caches to recover additional space.
+**Solution:** Ran `docker system prune -a --volumes -f` which safely removed unused images and volumes, recovering 4.7GB. Also cleared pacman cache and journal logs to recover additional space, bringing usage down to 80%.
 
-**Lesson:** Docker image sprawl is a real operational concern. Regular pruning and monitoring disk usage should be part of any lab hygiene practice.
+**Lesson:** Docker image sprawl is a real operational concern in lab environments. Regular pruning and disk monitoring should be part of any lab hygiene practice.
 
 ---
 
-### Challenge 3: Custom Detection Rules Not Firing
+### Challenge 3: Custom Detection Rules Not Firing (0% → 100%)
 
-**Problem:** After writing 6 custom Wazuh rules using `if_sid` to chain from parent rules (92027, 92031, 92034), the validation pipeline showed 0% coverage — none of the custom rules were appearing in alerts even though the parent rules were firing correctly.
+**Problem:** After writing 6 custom Wazuh rules using `if_sid` to chain from parent rules (92027, 92031, 92034), the validation pipeline showed 0% coverage — none of the custom rules were appearing in alerts even though parent rules were firing correctly with hundreds of hits.
 
-**Root cause investigation:**
-1. First checked if parent rules were firing — they were (hundreds of hits)
-2. Checked if rule syntax was valid — it was
-3. Queried the raw alerts log and found tasklist.exe and wmic.exe events were triggering **different** Sysmon event IDs than expected
-4. Discovered Wazuh's rule chaining behavior: `if_sid` on a rule that is itself a child rule (like 92041) requires `if_matched_sid` instead
+**Diagnosis process:**
+1. Confirmed parent rules were firing — hundreds of hits visible in dashboard
+2. Confirmed rule XML syntax was valid — no parse errors on restart
+3. Queried raw alerts log to see actual field values in Sysmon events
+4. Discovered tasklist.exe and wmic.exe events were triggering different base Sysmon event IDs than expected
+5. Found that `if_sid` on a rule that is itself already a child rule (like 92041) requires `if_matched_sid` instead
 
-**Solution:** Changed the base `if_sid` references to `61603` (the raw Sysmon process creation event) for process-based rules, and changed `if_sid` to `if_matched_sid` for the T1027 Base64 registry rule that chains from 92041. Coverage went from 0% → 100%.
+**Solution:**
+- Changed base `if_sid` references to `61603` (raw Sysmon process creation event) for process-based rules
+- Changed `if_sid` to `if_matched_sid` for the T1027 Base64 registry rule that chains from 92041
+- Coverage went from 0% → 80% → 100% through iterative fixes
 
-**Lesson:** Understanding the difference between `if_sid` and `if_matched_sid` in Wazuh's rule chaining model is critical for detection engineers working on custom rule development.
+**Lesson:** Understanding the difference between `if_sid` and `if_matched_sid` in Wazuh's rule chaining model is critical knowledge for detection engineers writing custom rules. This is not well documented and required reading the source behavior directly from logs.
 
 ---
 
 ### Challenge 4: Wazuh API Endpoint Mismatch
 
-**Problem:** The initial pipeline used `/siem/alerts` endpoint which returned 404. All 5 techniques showed FAIL despite rules clearly firing in the dashboard.
+**Problem:** The initial pipeline used `/siem/alerts` endpoint to query for fired rules. All 5 techniques returned FAIL despite rules clearly visible firing in the Wazuh dashboard. The endpoint returned 404.
 
-**Solution:** Switched to querying the Wazuh OpenSearch indexer directly at `https://localhost:9200/wazuh-alerts-*/_search` using the OpenSearch DSL query format. This gave direct access to the alerts index and returned accurate results.
+**Solution:** Switched to querying the Wazuh OpenSearch indexer directly at:
+```
+https://localhost:9200/wazuh-alerts-*/_search
+```
+Using OpenSearch DSL query format with `bool/must` filters for rule ID, agent ID, and timestamp range. This gave direct, accurate access to the alerts index.
 
-**Lesson:** Always verify API endpoint availability against the specific version you're running. Documentation for older versions can be misleading.
+**Lesson:** Always verify API endpoints against the specific version being run. The Wazuh API and the underlying OpenSearch indexer API are separate interfaces — the indexer query gives more flexibility and reliability for custom tooling.
 
 ---
 
 ### Challenge 5: API Key Exposed in Git Commit
 
-**Problem:** GitHub's push protection blocked the push because the Anthropic API key was hardcoded in `generate_report.py` and detected in the commit history.
+**Problem:** GitHub's push protection blocked the push with:
+```
+remote: - GITHUB PUSH PROTECTION
+remote: Push cannot contain secrets
+remote: — Anthropic API Key —
+remote: locations: commit: fa580416 path: pipeline/generate_report.py:15
+```
+The Anthropic API key had been hardcoded directly in the source file and was detected in commit history.
 
 **Solution:**
 1. Replaced hardcoded key with `os.environ.get("ANTHROPIC_API_KEY")`
-2. Created `.env` file for local use and added it to `.gitignore`
-3. Used `git filter-branch` to rewrite history and remove the exposed secret
+2. Created `.env` file for local key storage and added to `.gitignore`
+3. Used `git filter-branch` to rewrite history and scrub the secret from all commits
 4. Force pushed the clean history
 
-**Lesson:** Never hardcode secrets in source files. Use environment variables from the start. GitHub's secret scanning is a valuable safety net but the correct fix is never committing secrets in the first place.
+**Lesson:** Never hardcode secrets in source files — use environment variables from the start. GitHub's secret scanning is a valuable last line of defense but the correct practice is never committing secrets in the first place. This is standard practice in any production security environment.
 
 ---
 
 ## Key Takeaways for Interviews
 
 **"What was the hardest part of this project?"**
-> The rule chaining issue — debugging why custom rules weren't firing despite parent rules working correctly required understanding Wazuh's internal rule evaluation model at a deep level. The fix was a single XML attribute change (`if_sid` → `if_matched_sid`) but finding it required systematic log analysis and reading source documentation carefully.
+> The rule chaining issue — debugging why custom rules weren't firing despite parent rules working correctly required understanding Wazuh's internal rule evaluation model at a deep level. The fix was a single XML attribute change (`if_sid` → `if_matched_sid`) but finding it required systematic log analysis, reading raw alert output, and understanding how Wazuh chains multi-level rules. That kind of low-level debugging is what separates someone who uses security tools from someone who understands them.
 
 **"How does this relate to real-world detection engineering?"**
-> Real detection engineering teams face the same core problem: rules get written and deployed but nobody validates they actually work against the techniques they're supposed to detect. This pipeline automates that validation — the same concept used by mature security teams running detection-as-code workflows.
+> Real detection engineering teams face the same core problem: rules get written and deployed but nobody validates they actually work against the techniques they're supposed to detect. Rules break silently when attacker behavior evolves. This pipeline automates that validation continuously — the same concept used by mature security teams running detection-as-code workflows at companies like CrowdStrike and Palo Alto.
 
 **"Why did you choose this stack?"**
-> Wazuh because it's open source and widely used in enterprise environments. Sysmon because it's the gold standard for Windows endpoint telemetry. Atomic Red Team because it provides standardized, reproducible ATT&CK technique simulations. The combination mirrors what real blue teams use.
+> Wazuh because it's open source and widely deployed in enterprise environments. Sysmon because it's the gold standard for Windows endpoint telemetry. Atomic Red Team because it provides standardized, reproducible ATT&CK technique simulations used by real red teams. The combination mirrors what actual blue teams use — this isn't a toy lab, it's a realistic enterprise simulation.
 
 ---
 
 ## Future Improvements
 
-- [ ] Add GitHub Actions workflow to run pipeline on every rule change
+- [ ] Add GitHub Actions workflow to run pipeline automatically on every rule change
 - [ ] Expand to 20+ ATT&CK techniques across more tactics
-- [ ] Add Sigma rule conversion for multi-SIEM support
-- [ ] Integrate Splunk as second SIEM target
+- [ ] Add Sigma rule conversion for multi-SIEM support (Splunk SPL, KQL)
+- [ ] Integrate Splunk as second SIEM validation target
 - [ ] Add detection drift alerting — notify when a previously passing rule starts failing
-- [ ] Build ATT&CK Navigator heatmap export
+- [ ] Build ATT&CK Navigator heatmap JSON export
+- [ ] Add cleanup/rollback for Atomic Red Team test artifacts
 
 ---
 
 ## Author
 
-**Fernando** — AAS Information Assurance  
-Focused on detection engineering, SOC automation, and AI-assisted security operations.  
+**Fernando** — AAS Information Assurance
+Focused on detection engineering, SOC automation, and AI-assisted security operations.
 GitHub: [@cpt-ferna02](https://github.com/cpt-ferna02)
