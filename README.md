@@ -12,7 +12,7 @@
 
 ## Pipeline — 100% ATT&CK Coverage
 
-![Pipeline](docs/screenshots/05-pipeline-100-coverage.png)
+![Pipeline](screenshots/05-pipeline-100-coverage.png)
 
 ---
 
@@ -82,35 +82,35 @@ This mirrors how mature security teams at enterprise organizations validate thei
 ## Screenshots
 
 ### Lab Environment — Wazuh Agent Active
-![Wazuh Agent](docs/screenshots/01-wazuh-agent-active.png)
+![Wazuh Agent](screenshots/01-wazuh-agent-active.png)
 
 *Windows 11 host connected to Wazuh manager with active status — the foundation of the detection lab.*
 
 ---
 
 ### Attack Simulation — Sysmon Telemetry Flooding In
-![Sysmon Events](docs/screenshots/02-sysmon-events-firing.png)
+![Sysmon Events](screenshots/02-sysmon-events-firing.png)
 
 *223+ Sysmon events captured during ATT&CK technique simulation — discovery activity, net.exe account enumeration, and abnormal process chains all visible.*
 
 ---
 
 ### Attack Simulation — High Severity Detections
-![Attack Detections](docs/screenshots/03-sysmon-attack-detections.png)
+![Attack Detections](screenshots/03-sysmon-attack-detections.png)
 
 *Level 15 (critical) alerts firing — executable dropped in malware-common folder and Base64-like pattern detected in registry key (T1027 Defense Evasion).*
 
 ---
 
 ### Custom Detection Rules Firing
-![Custom Rules](docs/screenshots/04-custom-rules-firing.png)
+![Custom Rules](screenshots/04-custom-rules-firing.png)
 
 *Custom rule IDs 100004 and 100006 firing — these are not built-in Wazuh rules. These were written specifically for this project, mapped to MITRE ATT&CK T1059.001 and T1082.*
 
 ---
 
 ### ATT&CK Coverage Dashboard
-![Dashboard](docs/screenshots/06-html-dashboard.png)
+![Dashboard](screenshots/06-html-dashboard.png)
 
 *Auto-generated HTML dashboard showing 100% coverage ring, 5/5 techniques passed, with full ATT&CK technique breakdown.*
 
